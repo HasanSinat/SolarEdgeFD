@@ -9,7 +9,6 @@ from streamlit_lottie import st_lottie
 from streamlit_lottie import st_lottie_spinner
 import os
 import streamlit as st
-
 def check_password():
     """Returns `True` if the user had a correct password."""
     def password_entered():
@@ -45,9 +44,7 @@ def check_password():
     else:
         # Password correct.
         return True
-
 if check_password():
-    
     api_key = st.secrets["SolarEdge_API_KEY"]
     pd.set_option('display.max_rows', None)
     pd.set_option('display.max_columns', None)
@@ -68,6 +65,7 @@ if check_password():
     #ne zaman kurulmuşlar,  inverter sayısı....
 
     #inverterSN = "7E1AB3E9-34"
+    baseUrl="https://monitoringapi.solaredge.com"
     inverterSN = " "
     startTime = "2022-04-01"
     endTime = "2022-04-07"
@@ -92,7 +90,7 @@ if check_password():
                 return plant["ins_date"]
     @st.experimental_memo(show_spinner=False)
     def fetchData(siteID,startTime,endTime,inverterSN,api_key, counter,dataTypes):
-        response_data = requests.get(f"https://monitoringapi.solaredge.com/equipment/{siteID}/{inverterSN}/data?startTime={startTime} 08:00:00&endTime={endTime} 19:00:00&api_key={api_key}").json() #Api'ye json formatında istek atıyorum.
+        response_data = requests.get(f"{baseUrl}/equipment/{siteID}/{inverterSN}/data?startTime={startTime} 08:00:00&endTime={endTime} 19:00:00&api_key={api_key}").json() #Api'ye json formatında istek atıyorum.
         data = pd.json_normalize(response_data["data"]["telemetries"], )
         data=data[dataTypes + ["date"]  ]
         data["InverterNo"] = f"Inverter {counter}"
@@ -114,6 +112,10 @@ if check_password():
         csv = mixed.to_csv()
         csv = csv.encode('utf-8')
         return csv
+    def siteDetailsData (siteID,api_key):
+        response = requests.get(f"{baseUrl}/site/{siteID}/details?api_key={api_key}").json()
+        data = pd.json_normalize(response["details"])
+        return data
     lottie_url_hamster = "https://assets9.lottiefiles.com/packages/lf20_xktjqpi6.json"
     lottie_hamster = load_lottieurl(lottie_url_hamster)
 
@@ -133,7 +135,11 @@ if check_password():
             endTime = st.date_input("Btiş Tarihi",max_value=datetime.datetime.now())
 
         st.session_state["selectedDataTypes"] = st.multiselect(label="Data Tipleri", options=dataTypes , default=dataTypes)
-        submitted = st.form_submit_button("Submit")
+        col1, mid, col2 = st.columns([10,15,7.5])
+        with col1:
+            submitted = st.form_submit_button("Submit")
+        with  col2:
+            sitedetails = st.form_submit_button("Site Details")
     with st.expander("Bilgilendirme"):
         st.info("API'de günlük istek limiti bulunmaktadır, bu limit genel çağrılar için 300, santral numarası ile ile yapılan çağrılar için de ayrıca 300 olarak belirlenmiştir.\n Günlük istek limiti aşıldığıda istek hata döndürecektir.")
         st.warning("API'ın çalışma şekli toplu veri indirmeye uygun olmadığından, veriler her inverter bazında verilen tarih aralığını bir haftalık bloklara bölüp ardından tüm dataları bir araya getirmek suretiyle çalışır, Ornegin 9 inverterli bir tesisten bir aylık data çekmek için her inverter için 4 haftalık data çekilip birleştirilir, seri no'ları çekmek için 1 veriler için 36 olmak üzere toplam 37 istek atılmış olur.")
@@ -146,7 +152,7 @@ if check_password():
                 st.experimental_memo.clear()
     if submitted:
         try:
-            response_inventory = requests.get(f"https://monitoringapi.solaredge.com/site/{siteID}/inventory?api_key={api_key}").json() #Api'ye json formatında istek atıyorum.
+            response_inventory = requests.get(f"{baseUrl}/site/{siteID}/inventory?api_key={api_key}").json() #Api'ye json formatında istek atıyorum.
         except:
             sys.exit("Data Alınamadı, Lütfen Sonra Tekrar Deneyiniz.")
 
@@ -154,15 +160,6 @@ if check_password():
             inverters.append(inverter["SN"])
 
             connected_optimizer += inverter["connectedOptimizers"] 
-        
-        colx,coly,colz = st.columns(3)
-        with colx:
-            st.metric(label="Seçilen Santral", value=selectedPlant)
-        with coly:
-            st.metric(label="Bağlı Optimizer Sayısı", value=connected_optimizer)
-        with colz:
-            st.metric(label="Kuruluş Tarihi", value="12.02.2022")
-        st.write("##")
         if endTime - startTime < datetime.timedelta(weeks=1):
             st.info("Aralık Bir Haftadan Kısa Seçilemez, Aralık Uygun olacak şekilde Bitiş Tarihi Güncellenmiştir.")
             startTime = endTime - datetime.timedelta(days=6)
@@ -206,9 +203,6 @@ if check_password():
                     "text/csv",
                     key='download-csv'
                     )
-
-        
-        
         with col2:
             with st.spinner("Excel Dosyası Hazırlanıyor.."):
                 buffer =excelCreator() 
@@ -218,3 +212,31 @@ if check_password():
                     file_name="file_name_Yield.xlsx",
                     mime="application/vnd.ms-excel"
                     ) 
+    if sitedetails: #site details section
+        sitedetailsdatas = siteDetailsData(siteID,api_key)
+        response_inventory = requests.get(f"{baseUrl}/site/{siteID}/inventory?api_key={api_key}").json() #Api'ye json formatında istek atıyorum.
+        for inverter in response_inventory["Inventory"]["inverters"]:  #inverterlerin seri nolarını çıkarıp ayrı bir listeye ekliyorum.
+            connected_optimizer += inverter["connectedOptimizers"] 
+        sitePeakPower = sitedetailsdatas["peakPower"]
+        pd.to_numeric(sitePeakPower)    
+        siteName = sitedetailsdatas["name"].str.cat()
+        siteinsDate =sitedetailsdatas["installationDate"].str.cat()
+        siteMaxPower = sitedetailsdatas["primaryModule.maximumPower"]
+        pd.to_numeric(siteMaxPower) 
+        siteCity = sitedetailsdatas["location.city"].str.cat()
+        siteTown = sitedetailsdatas["location.address"].str.cat()
+        siteImageUrl=sitedetailsdatas["uris.SITE_IMAGE"].str.cat()
+        st.header(siteName)
+        st.image(f"{baseUrl}{siteImageUrl}?api_key={api_key}" )
+        col1, gap1, col2, gap2, col3 = st.columns([3,2,4,2,3])
+        with col1:
+            st.metric(label = "Peak Power (kWp)" ,value = sitePeakPower)
+        with col2:
+            st.metric(label = "Installed" ,value = siteinsDate)
+        with col3:
+            st.metric(label="Connected Optimizers", value=connected_optimizer)
+        #st.metric(label = "Site Max Power" ,value = siteMaxPower)
+        st.metric(label = "City" ,value = siteCity)
+        st.metric(label = "Address" ,value = siteTown)
+        
+ 
