@@ -1,4 +1,3 @@
-from urllib.request import AbstractDigestAuthHandler
 import  requests
 import pandas as pd
 import  datetime
@@ -9,9 +8,6 @@ import xlsxwriter
 from streamlit_lottie import st_lottie
 from streamlit_lottie import st_lottie_spinner
 import os
-from dotenv import load_dotenv
-
-load_dotenv()
 
 api_key = st.secrets["SolarEdge_API_KEY"]
 pd.set_option('display.max_rows', None)
