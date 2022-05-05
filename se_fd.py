@@ -142,7 +142,7 @@ if check_password():
             endTime = st.date_input("Btiş Tarihi",max_value=datetime.datetime.now())
 
         st.session_state["selectedDataTypes"] = st.multiselect(label="Data Tipleri", options=dataTypes , default=dataTypes)
-        col1, mid, col2 = st.columns([10,15,7.5])
+        col1, mid, col2 = st.columns([10,39,10])
         with col1:
             submitted = st.form_submit_button("Submit")
         with  col2:
