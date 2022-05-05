@@ -9,6 +9,7 @@ from streamlit_lottie import st_lottie
 from streamlit_lottie import st_lottie_spinner
 import os
 import streamlit as st
+import math
 hide_streamlit_style = """
             <style>
             #MainMenu {visibility: hidden;}
@@ -30,7 +31,6 @@ def check_password():
             del st.session_state["username"]
         else:
             st.session_state["password_correct"] = False
-
     if "password_correct" not in st.session_state:
         # First run, show inputs for username + password.
         
@@ -69,9 +69,6 @@ if check_password():
         {"id": 521013, "name": "TED DENİZLİ KOLEJİ GES"},
         {"id": 2563278, "name": "TRIMLINE/BALOSB GES"},
         ]
-    #ne zaman kurulmuşlar,  inverter sayısı....
-
-    #inverterSN = "7E1AB3E9-34"
     baseUrl="https://monitoringapi.solaredge.com"
     inverterSN = " "
     startTime = "2022-04-01"
@@ -97,12 +94,19 @@ if check_password():
                 return plant["ins_date"]
     @st.experimental_memo(show_spinner=False)
     def fetchData(siteID,startTime,endTime,inverterSN,api_key, counter,dataTypes):
-        response_data = requests.get(f"{baseUrl}/equipment/{siteID}/{inverterSN}/data?startTime={startTime} 08:00:00&endTime={endTime} 19:00:00&api_key={api_key}").json() #Api'ye json formatında istek atıyorum.
-        data = pd.json_normalize(response_data["data"]["telemetries"], )
-        data=data[dataTypes + ["date"]  ]
-        data["InverterNo"] = f"Inverter {counter}"
-        data.fillna(0,inplace=True)
-        data = data.groupby(["date", "InverterNo", ]).mean()
+        try:
+            response_data = requests.get(f"{baseUrl}/equipment/{siteID}/{inverterSN}/data?startTime={startTime} 08:00:00&endTime={endTime} 19:00:00&api_key={api_key}").json()
+        except Exception as e:
+            print(response_data)
+            print("hata bölgesi 1")
+            pass
+           #Api'ye json formatında istek atıyorum.
+        if response_data:
+            data = pd.json_normalize(response_data["data"]["telemetries"], )
+            data=data[dataTypes + ["date"]  ]
+            data["InverterNo"] = f"Inverter {counter}"
+            data.fillna(0,inplace=True)
+            data = data.groupby(["date", "InverterNo", ]).mean()
         return data
     @st.experimental_memo(show_spinner=False)
     def load_lottieurl(url: str):
@@ -183,46 +187,54 @@ if check_password():
                     for i in range(len(tarih)-1):
                         startTime=tarih[i]
                         endTime=tarih[i+1]
-                        data = fetchData(siteID=siteID, startTime=startTime,endTime=endTime,inverterSN=sn,api_key=api_key,counter=counter,dataTypes=st.session_state["selectedDataTypes"])
+                        try:
+                            data = fetchData(siteID=siteID, startTime=startTime,endTime=endTime,inverterSN=sn,api_key=api_key,counter=counter,dataTypes=st.session_state["selectedDataTypes"])
+                        except Exception as e:
+                            print("hata bölgesi 2")
+                            print (e)
+                            pass
                         frameList.append(data)
                     counter +=1
-                inverterCount= counter
+                
                 
                 mixed = pd.concat(frameList)
                 st.write(mixed)
         
-        except:
-            sys.exit("Data Alınamadı, Lütfen Sonra Tekrar Deneyiniz.")
+        except Exception as e:
+            print(e)
+            #sys.exit("Data Alınamadı, Lütfen Sonra Tekrar Deneyiniz.")
+            mixed = st.dataframe()
+            pass
 
         st.header("##")
     
         col1, mid, col2 = st.columns([10,15,7.5])
 
-        print(inverters)
-        
-        with col1:
-            with st.spinner("CSV Dosyası Hazırlanıyor.."):
-                csv = csvCreator()
-                st.download_button(
-                    "Download as CSV",
-                    csv,
-                    "file.csv",
-                    "text/csv",
-                    key='download-csv'
-                    )
-        with col2:
-            with st.spinner("Excel Dosyası Hazırlanıyor.."):
-                buffer =excelCreator() 
-                st.download_button(
-                    label="Download as XLSX",
-                    data=buffer,
-                    file_name="file_name_Yield.xlsx",
-                    mime="application/vnd.ms-excel"
-                    ) 
+        if not mixed.empty:
+            with col1:
+                with st.spinner("CSV Dosyası Hazırlanıyor.."):
+                    csv = csvCreator()
+                    st.download_button(
+                                "Download as CSV",
+                                csv,
+                                "file.csv",
+                                "text/csv",
+                                key='download-csv'
+                                )
+            with col2:
+                with st.spinner("Excel Dosyası Hazırlanıyor.."):
+                    buffer =excelCreator()
+                    st.download_button(
+                            label="Download as XLSX",
+                            data=buffer,
+                            file_name="file_name_Yield.xlsx",
+                            mime="application/vnd.ms-excel"
+                            ) 
     if sitedetails: #site details section
         sitedetailsdatas = siteDetailsData(siteID,api_key)
         response_inventory = requests.get(f"{baseUrl}/site/{siteID}/inventory?api_key={api_key}").json() #Api'ye json formatında istek atıyorum.
-        for inverter in response_inventory["Inventory"]["inverters"]:  #inverterlerin seri nolarını çıkarıp ayrı bir listeye ekliyorum.
+        for inverter in response_inventory["Inventory"]["inverters"]:
+            inverters.append(inverter["SN"])  #inverterlerin seri nolarını çıkarıp ayrı bir listeye ekliyorum.
             connected_optimizer += inverter["connectedOptimizers"] 
         sitePeakPower = sitedetailsdatas["peakPower"]
         pd.to_numeric(sitePeakPower)    
@@ -235,6 +247,9 @@ if check_password():
         siteImageUrl=sitedetailsdatas["uris.SITE_IMAGE"].str.cat()
         st.header(siteName)
         st.image(f"{baseUrl}{siteImageUrl}?api_key={api_key}" )
+        inverterCount = len(inverters)
+        maxCall = math.floor(290 / (inverterCount * 4))
+
         col1, gap1, col2, gap2, col3 = st.columns([3,2,4,2,3])
         with col1:
             st.metric(label = "Peak Power (kWp)" ,value = sitePeakPower)
@@ -243,6 +258,11 @@ if check_password():
         with col3:
             st.metric(label="Connected Optimizers", value=connected_optimizer)
         #st.metric(label = "Site Max Power" ,value = siteMaxPower)
+        col1, gap1, col2, gap2, col3 = st.columns([3,2,4,2,3])
+        with col1:
+            st.metric(label="Inverter Count", value=inverterCount)
+        with col2:
+            st.metric(label="Max. Request at Once", value=f"{maxCall} Months")
         st.metric(label = "City" ,value = siteCity)
         st.metric(label = "Address" ,value = siteTown)
         
