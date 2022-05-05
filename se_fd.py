@@ -9,6 +9,13 @@ from streamlit_lottie import st_lottie
 from streamlit_lottie import st_lottie_spinner
 import os
 import streamlit as st
+hide_streamlit_style = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            footer {visibility: hidden;}
+            </style>
+            """
+st.markdown(hide_streamlit_style, unsafe_allow_html=True) 
 def check_password():
     """Returns `True` if the user had a correct password."""
     def password_entered():
