@@ -94,20 +94,19 @@ if check_password():
                 return plant["ins_date"]
     @st.experimental_memo(show_spinner=False)
     def fetchData(siteID,startTime,endTime,inverterSN,api_key, counter,dataTypes):
-        try:
-            response_data = requests.get(f"{baseUrl}/equipment/{siteID}/{inverterSN}/data?startTime={startTime} 08:00:00&endTime={endTime} 19:00:00&api_key={api_key}").json()
-        except Exception as e:
-            print(response_data)
-            print("hata bölgesi 1")
-            pass
+        
+        response_data = requests.get(f"{baseUrl}/equipment/{siteID}/{inverterSN}/data?startTime={startTime} 08:00:00&endTime={endTime} 19:00:00&api_key={api_key}")
+        statusCode = response_data.status_code
+        response_data = response_data.json()
            #Api'ye json formatında istek atıyorum.
-        if response_data:
+        if statusCode == 200 :
             data = pd.json_normalize(response_data["data"]["telemetries"], )
             data=data[dataTypes + ["date"]  ]
             data["InverterNo"] = f"Inverter {counter}"
             data.fillna(0,inplace=True)
             data = data.groupby(["date", "InverterNo", ]).mean()
         return data
+        
     @st.experimental_memo(show_spinner=False)
     def load_lottieurl(url: str):
         r = requests.get(url)
@@ -190,20 +189,17 @@ if check_password():
                         try:
                             data = fetchData(siteID=siteID, startTime=startTime,endTime=endTime,inverterSN=sn,api_key=api_key,counter=counter,dataTypes=st.session_state["selectedDataTypes"])
                         except Exception as e:
-                            print("hata bölgesi 2")
-                            print (e)
+                            print(e)
                             pass
                         frameList.append(data)
-                    counter +=1
-                
-                
+                    counter +=1   
                 mixed = pd.concat(frameList)
                 st.write(mixed)
         
         except Exception as e:
             print(e)
             #sys.exit("Data Alınamadı, Lütfen Sonra Tekrar Deneyiniz.")
-            mixed = st.dataframe()
+            mixed = pd.DataFrame()
             pass
 
         st.header("##")
@@ -229,7 +225,8 @@ if check_password():
                             data=buffer,
                             file_name="file_name_Yield.xlsx",
                             mime="application/vnd.ms-excel"
-                            ) 
+                            )
+        else: st.error("Santral Bazında Günlük Limit Aşımı ve / veya Dataların Başlangıç Tarihinden Önce Seçilmiş Başlangıç Tarihi.") 
     if sitedetails: #site details section
         sitedetailsdatas = siteDetailsData(siteID,api_key)
         response_inventory = requests.get(f"{baseUrl}/site/{siteID}/inventory?api_key={api_key}").json() #Api'ye json formatında istek atıyorum.
