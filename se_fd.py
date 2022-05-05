@@ -164,6 +164,7 @@ if check_password():
         try:
             response_inventory = requests.get(f"{baseUrl}/site/{siteID}/inventory?api_key={api_key}").json() #Api'ye json formatında istek atıyorum.
         except:
+            st.error("Günlük İşlem Limiti Aşıldı.")
             sys.exit("Data Alınamadı, Lütfen Sonra Tekrar Deneyiniz.")
 
         for inverter in response_inventory["Inventory"]["inverters"]:  #inverterlerin seri nolarını çıkarıp ayrı bir listeye ekliyorum.
