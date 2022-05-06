@@ -57,7 +57,7 @@ if check_password():
     pd.set_option('display.max_columns', None)
     buffer = io.BytesIO()
     solarEdgePlants = [
-        {"id": 2176821, "name": "ABDULLAH YILMAZ GÜNEŞ GES","ins_date": "13.02.2022"},
+        {"id": 2176821, "name": "ABDULLAH YILMAZ GÜNEŞ GES",},
         {"id": 1061237,"name": "ALKOR GES" },
         {"id": 603955, "name": "CELAL BAYAR ÜNİVERSİTESİ GES"},
         {"id": 2696896, "name": "ERMAS MADENCILIK"},
@@ -94,18 +94,17 @@ if check_password():
                 return plant["ins_date"]
     @st.experimental_memo(show_spinner=False)
     def fetchData(siteID,startTime,endTime,inverterSN,api_key, counter,dataTypes):
-        
         response_data = requests.get(f"{baseUrl}/equipment/{siteID}/{inverterSN}/data?startTime={startTime} 08:00:00&endTime={endTime} 19:00:00&api_key={api_key}")
         statusCode = response_data.status_code
-        response_data = response_data.json()
-           #Api'ye json formatında istek atıyorum.
-        if statusCode == 200 :
+        response_data = response_data.json()  #Api'ye json formatında istek atıyorum.
+        if statusCode == 200 and response_data["data"]["count"] !=0 :
             data = pd.json_normalize(response_data["data"]["telemetries"], )
             data=data[dataTypes + ["date"]  ]
             data["InverterNo"] = f"Inverter {counter}"
             data.fillna(0,inplace=True)
             data = data.groupby(["date", "InverterNo", ]).mean()
-        return data
+            return data
+        
         
     @st.experimental_memo(show_spinner=False)
     def load_lottieurl(url: str):
@@ -113,9 +112,9 @@ if check_password():
         if r.status_code != 200:
             return None
         return r.json()
-    def excelCreator():
+    def excelCreator(selectedPlant):
         with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-            mixed.to_excel(writer, sheet_name="yield_sheet_Nam")
+            mixed.to_excel(writer, sheet_name=f"{selectedPlant}")
             writer.save()
             return buffer      
     def csvCreator():
@@ -189,10 +188,10 @@ if check_password():
                         endTime=tarih[i+1]
                         try:
                             data = fetchData(siteID=siteID, startTime=startTime,endTime=endTime,inverterSN=sn,api_key=api_key,counter=counter,dataTypes=st.session_state["selectedDataTypes"])
+                            frameList.append(data)       
                         except Exception as e:
                             print(e)
                             pass
-                        frameList.append(data)
                     counter +=1   
                 mixed = pd.concat(frameList)
                 st.write(mixed)
@@ -214,17 +213,17 @@ if check_password():
                     st.download_button(
                                 "Download as CSV",
                                 csv,
-                                "file.csv",
+                                f"{selectedPlant}.csv",
                                 "text/csv",
                                 key='download-csv'
                                 )
             with col2:
                 with st.spinner("Excel Dosyası Hazırlanıyor.."):
-                    buffer =excelCreator()
+                    buffer =excelCreator(selectedPlant=selectedPlant)
                     st.download_button(
                             label="Download as XLSX",
                             data=buffer,
-                            file_name="file_name_Yield.xlsx",
+                            file_name=f"{selectedPlant}.xlsx",
                             mime="application/vnd.ms-excel"
                             )
         else: st.error("Santral Bazında Günlük Limit Aşımı ve / veya Dataların Başlangıç Tarihinden Önce Seçilmiş Başlangıç Tarihi.") 
